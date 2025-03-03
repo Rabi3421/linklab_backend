@@ -6,12 +6,6 @@ import supabase from "./config/db";
 dotenv.config();
 const app = Fastify({ logger: true });
 
-// Test Database Connection
-supabase.auth.getUser().then(({ data, error }) => {
-  if (error) console.error("❌ Supabase Authentication Error:", error);
-  else console.log("✅ Supabase Auth Connected");
-});
-
 // ✅ Register all routes
 registerRoutes(app);
 
