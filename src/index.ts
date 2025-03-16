@@ -1,7 +1,6 @@
 import Fastify from "fastify";
 import dotenv from "dotenv";
 import { registerRoutes } from "./routes";
-import supabase from "./config/db";
 
 dotenv.config();
 const app = Fastify({ logger: true });

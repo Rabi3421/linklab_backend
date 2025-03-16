@@ -8,11 +8,11 @@ export async function createShortUrl(originalUrl: string, title?: string, userId
 
   const { data, error } = await supabase
     .from("urls")
-    .insert([{ 
-      original_url: originalUrl, 
-      short_url: shortUrl, 
-      title, 
-      user_id: userId 
+    .insert([{
+      original_url: originalUrl,
+      short_url: shortUrl,
+      title,
+      user_id: userId || null
     }])
     .select()
     .single();
@@ -26,8 +26,10 @@ export async function getUrl(shortUrl: string) {
   const { data, error } = await supabase
     .from("urls")
     .select("*")
-    .eq("short_url", shortUrl)
+    .or(`custom_url.eq.${shortUrl},short_url.eq.${shortUrl}`)
     .single();
+
+  if (!data || error) throw new Error("Short URL not found");
 
   if (error) return null;
   return data as Url;
