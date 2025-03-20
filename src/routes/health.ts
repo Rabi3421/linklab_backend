@@ -1,8 +1,7 @@
 import { FastifyInstance } from 'fastify';
 
 export async function healthRoutes(app: FastifyInstance) {
-  app.get('/', async () => {
-    return { "message": "✅ LinkLab API is running!" }
-    ;
+  app.get('/', async (_, reply) => {
+    return reply.redirect(302, 'https://linklab.in/');
   });
 }

@@ -34,3 +34,24 @@ export async function getUrl(shortUrl: string) {
   if (error) return null;
   return data as Url;
 }
+
+export async function storeClick({ urlId, ip, userAgent }: { urlId: string; ip: string; userAgent: string }) {
+  try {
+    // Fetch location details using an IP API
+    const response = await fetch(`https://ipapi.co/json`);
+
+    const { city, country_name: country } = await response.json();
+
+    // Store the click data
+    await supabase.from('clicks').insert({
+      url_id: urlId,
+      city:city,
+      country: country,
+      device: userAgent.includes('Mobile') ? 'mobile' : 'desktop',
+    });
+
+    console.log("Click recorded successfully!");
+  } catch (error) {
+    console.error("Error recording click:", error);
+  }
+}
