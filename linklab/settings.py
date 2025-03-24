@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-4ykziex672-9n3)(*!k-mw*=-2mlbfibn2-v_0p2_d$!nm1b9-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*", "13.48.71.86"]
 AUTH_USER_MODEL = 'linklab_app.User'
 
 
@@ -148,11 +148,7 @@ SIMPLE_JWT = {
 
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    
-]
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -160,14 +156,15 @@ REST_FRAMEWORK = {
     )
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://20.163.239.30:9033",
-    "http://localhost:8081"
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     "http://20.163.239.30:9033",
+#     "http://localhost:8081"
+# ]
+
 
 CORS_ALLOW_ALL_HEADERS = True
 CORS_ALLOW_ALL_ORIGINS = True
 # ASGI_APPLICATION = 'expedichat.asgi.application'
-CORS_ALLOWED_ORIGINS = default=["http://localhost:3030", "http://127.0.0.1:3000", "http://20.163.239.30:9033" ,"https://expedichat.com", "https://app.expedichat.com","https://speedychat.io","https://app.speedychat.io"]
+CORS_ALLOWED_ORIGINS = ["http://localhost:3030", "http://127.0.0.1:3000"]
