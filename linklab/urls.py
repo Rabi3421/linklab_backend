@@ -19,5 +19,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("linklab/api/v0/", include('linklab_app.urls')),
+    path("", include('linklab_app.urls')),
 ]
