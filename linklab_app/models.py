@@ -1,5 +1,6 @@
 import datetime
 from django.utils import timezone
+from django.utils.timezone import now
 from django.db import models
 from django.contrib.auth.models import BaseUserManager,AbstractBaseUser
 import uuid
@@ -102,3 +103,33 @@ class ShortenedURL(models.Model):
 
     def __str__(self):
         return f"{self.short_code} -> {self.original_url}"
+    
+class URLVisit(models.Model):
+    short_url = models.ForeignKey(
+        ShortenedURL,
+        on_delete=models.CASCADE,
+        related_name='visits'
+    )
+    timestamp = models.DateTimeField(default=now)
+    ip_address = models.GenericIPAddressField()
+    location = models.CharField(max_length=255, default="Unknown")
+    user_agent = models.TextField()
+    device_type = models.CharField(max_length=20, default="Unknown")
+
+    # ✅ Added fields for advanced analytics
+    referrer = models.CharField(max_length=500, null=True, blank=True)  # Tracks where the visit came from
+    browser = models.CharField(max_length=50, default="Unknown")         # Browser type
+    os = models.CharField(max_length=50, default="Unknown")               # Operating system (Windows, Mac, Android, etc.)
+    is_mobile = models.BooleanField(default=False)                       # Mobile or Desktop flag
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)  # Latitude
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True) # Longitude
+
+    def __str__(self):
+        return f"Visit to {self.short_url.short_code} from {self.ip_address} at {self.timestamp}"
+
+    class Meta:
+        ordering = ['-timestamp']  # Latest visits first
+        indexes = [
+            models.Index(fields=['short_url', 'timestamp']),
+            models.Index(fields=['ip_address']),
+        ]

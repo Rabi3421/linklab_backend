@@ -1,5 +1,7 @@
 import requests
 import shortuuid
+import random
+import string
 from ..models import User
 # from expedichat_app.models import User
 from django.contrib.auth.models import User
@@ -54,7 +56,13 @@ def get_google_user_info(access_token):
 
 
 def generate_unique_referral_code(number):
-    return shortuuid.uuid()[:number]  
+    return shortuuid.uuid()[:number] 
+
+
+
+def generate_short_url():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+
 
 
 def create_users(user_data):

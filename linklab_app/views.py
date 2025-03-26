@@ -1,16 +1,19 @@
-from django.shortcuts import render
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
+import requests
+from .models import ShortenedURL
+from django.utils import timezone
+from rest_framework import status
 from .middlewares import google_auth
+from rest_framework.response import Response
+from linklab_app.models import User, URLVisit
 from. serializers import UserProfileSerializer
-from linklab_app.models import User
+from django.shortcuts import get_object_or_404
+from django.utils.timezone import now, timedelta
+from django.http import HttpResponseRedirect, Http404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import status as http_status
-from rest_framework import status
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.exceptions import TokenError
+
 
 # Create your views here.
 @api_view(['GET'])
@@ -112,12 +115,7 @@ def user_logout_view(request):
         return Response({"error": str(error)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from django.shortcuts import get_object_or_404
-from .models import ShortenedURL
+
 # from .utils import generate_short_code
 
 # Create Short URL
@@ -134,7 +132,8 @@ def create_short_url_views(request):
         if not original_url:
             return Response({'error': 'Original URL is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        short_code = custom_url if custom_url else google_auth.generate_unique_referral_code(number)
+        # short_code = custom_url if custom_url else google_auth.generate_short_url()
+        short_code = google_auth.generate_short_url()
         
         if ShortenedURL.objects.filter(short_code=short_code).exists():
             return Response({'error': 'Custom URL already exists'}, status=status.HTTP_400_BAD_REQUEST)
@@ -174,46 +173,127 @@ def create_short_url_views(request):
                 "title": url.title
             })
         return Response(data, status=status.HTTP_200_OK)
-    
     elif request.method == 'DELETE':
         urls = ShortenedURL.objects.filter(id=request.GET.get('id'))
         urls.delete()
+
         return Response({"msg": "All Short URLs deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
     
 
 
-# Get Short URL
+
+
+def get_client_ip(request):
+    """Extracts the client's IP address, even behind proxies"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+
+    # Handle localhost IPs
+    if ip in ("127.0.0.1", "::1"):
+        ip = "8.8.8.8"  # Use Google's public IP for testing local requests
+
+    return ip
+
+
+
+
+def get_location(ip):
+    """Fetches location data using IP address."""
+    try:
+        response = requests.get(f'http://ip-api.com/json/{ip}')
+        data = response.json()
+        return (
+            f"{data.get('city', 'Unknown')}, {data.get('region', 'Unknown')}, {data.get('country', 'Unknown')}",
+            data.get('lat'),
+            data.get('lon')
+        )
+    except Exception:
+        return "Unknown", None, None
+
+def get_device_type(user_agent):
+    """Detect if the user is on Mobile or Desktop"""
+    user_agent = user_agent.lower()
+    if 'mobile' in user_agent:
+        return 'Mobile'
+    elif 'tablet' in user_agent:
+        return 'Tablet'
+    else:
+        return 'Desktop'
+
+
 @api_view(['GET'])
-def get_short_url(request, short_code):
-    url_entry = get_object_or_404(ShortenedURL, short_code=short_code)
-    return Response({
-        "id": url_entry.id,
-        "original_url": url_entry.original_url,
-        "short_url": url_entry.short_code,
-        "custom_url": url_entry.short_code,
-        "user_id": url_entry.user_id,
-        "title": url_entry.title
-    })
+def redirect_to_original(request, short_code):
+    try:
+        # start_time = datetime.now()
+        url_entry = get_object_or_404(ShortenedURL, short_code=short_code)
+        ip = get_client_ip(request)
+        # ip = "209.163.239.30"
+        location, latitude, longitude = get_location(ip)
+        user_agent = request.META.get('HTTP_USER_AGENT', 'unknown')
+        device_type = get_device_type(user_agent)
+        referrer = request.META.get('HTTP_REFERER', '')
+        
+        # Check for a recent visit from this IP & User-Agent within 5 seconds
+        recent_visit = URLVisit.objects.filter(
+            short_url=ShortenedURL.objects.get(short_code=short_code),
+            ip_address=ip,
+            user_agent=user_agent,
+            timestamp__gte=now() - timedelta(seconds=5)
+        ).exists()
+        if recent_visit:
+            return HttpResponseRedirect(url_entry.original_url)
+        # if recent_visit:
+        track = URLVisit.objects.create(
+            short_url=ShortenedURL.objects.get(short_code=short_code),
+            ip_address=ip,
+            location=location,
+            latitude=latitude,
+            longitude=longitude,
+            user_agent=user_agent,
+            device_type=device_type,
+            browser="Unknown",
+            os="Unknown",
+            referrer=referrer
+        )
+        # Fire tracking signal asynchronously
+        # track_redirect_signal.send(sender=None, request=request, short_code=short_code)
+        # end_time = datetime.now()
+        # time_taken = (end_time - start_time).total_seconds()
+        return HttpResponseRedirect(url_entry.original_url)
+    except ShortenedURL.DoesNotExist:
+        return Response({"error": "Short URL not found"}, status=404)
+    except:
+        raise Http404("Short URL not found")
 
 
-# Update Short URL
-@api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def update_short_url(request, short_code):
-    url_entry = get_object_or_404(ShortenedURL, short_code=short_code, user_id=request.user.id)
-    data = request.data
-    
-    url_entry.title = data.get('title', url_entry.title)
-    url_entry.original_url = data.get('original_url', url_entry.original_url)
-    url_entry.save()
+@api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+def get_tracking_views(request):
+    try:
+        short_code = request.GET.get('short_code')
+        if not short_code:
+            return Response({'error': 'Short code is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({"msg": "Short URL updated successfully"}, status=status.HTTP_200_OK)
+        url = get_object_or_404(ShortenedURL, short_code=short_code)
+        visits = URLVisit.objects.filter(short_url=url).order_by('-timestamp')
+        data = []
+        for visit in visits:
+            data.append({
+                'timestamp': visit.timestamp,
+                'ip_address': visit.ip_address,
+                'location': visit.location,
+                'user_agent': visit.user_agent,
+                'device_type': visit.device_type,
+                'browser': visit.browser,
+                'os': visit.os,
+                'referrer': visit.referrer,
+                'latitude': visit.latitude,
+                'longitude': visit.longitude
 
-
-# Delete Short URL
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_short_url(request, short_code):
-    url_entry = get_object_or_404(ShortenedURL, short_code=short_code, user_id=request.user.id)
-    url_entry.delete()
-    return Response({"msg": "Short URL deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+            })
+        return Response(data, status=status.HTTP_200_OK)
+    except:
+        return Response({'error': 'Tracking data not found'}, status=status.HTTP_404_NOT_FOUND)

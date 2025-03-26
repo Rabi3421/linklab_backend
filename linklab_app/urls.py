@@ -10,4 +10,6 @@ urlpatterns = [
     path('logout/', views.user_logout_view, name="logout"),
     # linklab short url functionality
     path('shorten_url/crud/', views.create_short_url_views, name='shorten_url'),
+    path('<str:short_code>', views.redirect_to_original, name='redirect'),
+    path('get_tracking/', views.get_tracking_views, name='get_shortened_url'),
 ]
