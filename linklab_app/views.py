@@ -1,18 +1,21 @@
 import requests
-from .models import ShortenedURL
+from .models import ShortenedURL, SubscriptionPlan, UserSubscription
 from django.utils import timezone
 from rest_framework import status
 from .middlewares import google_auth
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from linklab_app.models import User, URLVisit
-from. serializers import UserProfileSerializer
+from. serializers import UserProfileSerializer, SubscribeUserSerializer
 from django.shortcuts import get_object_or_404
 from django.utils.timezone import now, timedelta
-from django.http import HttpResponseRedirect, Http404
+from django.http import HttpResponseRedirect, Http404, JsonResponse
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework_simplejwt.exceptions import TokenError
+import datetime
+
 
 
 # Create your views here.
@@ -297,3 +300,91 @@ def get_tracking_views(request):
         return Response(data, status=status.HTTP_200_OK)
     except:
         return Response({'error': 'Tracking data not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+from .serializers import SubscriptionPlanSerializer
+@permission_classes([IsAuthenticated])
+class SubscriptionPlanView(APIView):
+    def get(self, request):
+        """Fetch all subscription plans"""
+        plans = SubscriptionPlan.objects.all()
+        serializer = SubscriptionPlanSerializer(plans, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """Create a new subscription plan"""
+        serializer = SubscriptionPlanSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def put(self, request):
+        """Update a specific plan"""
+        try:
+            plan_id = request.GET.get("plan_id")
+            plan = SubscriptionPlan.objects.get(pk=plan_id)
+            serializer = SubscriptionPlanSerializer(plan, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({"error": "Plan not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    def delete(self, request):
+        """Delete a specific plan"""
+        try:
+            plan_id = request.GET.get("plan_id")
+            plan = SubscriptionPlan.objects.get(pk=plan_id)
+            plan.delete()
+            return Response({"message": "Plan deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({"error": "Plan not found"}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def subscribe_user(request):
+    """Subscribe a user to a plan"""
+    serializer = SubscribeUserSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        # plan_id = serializer.validated_data.get('plan_id')
+        user = request.user
+        plan_id = request.data.get("plan_id")
+        
+        # Get the subscription plan
+        plan = get_object_or_404(SubscriptionPlan, id=plan_id)
+        
+        try:
+            # Check if user already has an active subscription
+            subscription, created = UserSubscription.objects.get_or_create(
+                user=user, defaults={'plan': plan, 'start_date': datetime.now(), 'end_date': datetime.now() + timedelta(days=plan.duration_days)}
+            )
+            
+            if not created:
+                # Extend existing subscription
+                subscription.plan = plan
+                subscription.start_date = datetime.now()
+                subscription.end_date = datetime.now() + timedelta(days=plan.duration_days)
+                subscription.save()
+
+            return Response({"message": "Subscription successful", "plan": plan.name}, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_subscription_status(request):
+    """ Returns user subscription status """
+    try:
+        subscription = UserSubscription.objects.get(user=request.user)
+        is_active = subscription.is_active()
+        return JsonResponse({
+            "plan": subscription.plan.name,
+            "is_active": is_active,
+            "end_date": subscription.end_date.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    except UserSubscription.DoesNotExist:
+        return JsonResponse({"message": "No active subscription"}, status=404)

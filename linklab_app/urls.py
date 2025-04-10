@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path
 from linklab_app import views
+from .views import SubscriptionPlanView
 
 urlpatterns = [
     path('hello/', views.hello_django, name='hello_django'),
@@ -12,4 +13,8 @@ urlpatterns = [
     path('shorten_url/crud/', views.create_short_url_views, name='shorten_url'),
     path('<str:short_code>', views.redirect_to_original, name='redirect'),
     path('get_tracking/', views.get_tracking_views, name='get_shortened_url'),
+    # subscription plan
+    path('plans/crud/', SubscriptionPlanView.as_view(), name='subscription-plans'),
+    path('subscribe/', views.subscribe_user, name='subscribe-user'),
+    path("subscriber/status/", views.check_subscription_status, name="check_subscription_status"),
 ]
