@@ -120,10 +120,10 @@ def user_logout_view(request):
 
 
 # from .utils import generate_short_code
-
+from collections import Counter
 # Create Short URL
 @api_view(['POST', 'GET', 'DELETE'])
-@permission_classes([IsAuthenticated])
+# @permission_classes([IsAuthenticated])
 def create_short_url_views(request):
     if request.method == 'POST':
         data = request.data
@@ -164,16 +164,36 @@ def create_short_url_views(request):
         if url_id:
             urls = ShortenedURL.objects.filter(id=url_id)
         else:
-            urls = ShortenedURL.objects.filter(email=request.user.email)
+            urls = ShortenedURL.objects.filter(email= request.user.email)
         data = []
         for url in urls:
+            visits = URLVisit.objects.filter(short_url_id=url.id)
+            visit_count = visits.count()
+
+            # Extract country names from location field
+            countries = []
+            for visit in visits:
+                if visit.location:
+                    parts = visit.location.split(',')
+                    if parts:
+                        country = parts[-1].strip()
+                        if country:
+                            countries.append(country)
+
+            # Find the most common country (top_country)
+            top_country = ""
+            if countries:
+                top_country = Counter(countries).most_common(1)[0][0]
             data.append({
                 "id": url.id,
                 "original_url": url.original_url,
                 "short_url": url.short_code,
                 "custom_url": url.custom_url or "",
                 "user_id": url.email,
-                "title": url.title
+                "title": url.title,
+                "total_clicks": visit_count,
+                "top_country": top_country,
+                "created_at": url.created_at
             })
         return Response(data, status=status.HTTP_200_OK)
     elif request.method == 'DELETE':
